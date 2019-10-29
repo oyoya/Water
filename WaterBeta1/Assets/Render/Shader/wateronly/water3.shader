@@ -17,9 +17,10 @@
 		_EdgeRange("EdgeRange",Range(0.1,10))=.4//边缘混合强度
 		_WaveSize("WaveSize",Range(0.01,1))=.25//波纹大小
 		_WaveOffset("WaveOffset(xy&zw)",vector)=(.1,.2,-.2,-.1)//波纹流动方向
-		_Gloss("_Gloss", float) = 100//高光系数
 		_LightColor("LightColor",Color)=(1,1,1,1)//光源颜色
 		_LightVector("LightVector(xyz for lightDir,w for power)",vector)=(.5,.5,.5,100)//光源方向
+		_Distortion("Distortion", Range(0, 100)) = 10
+		_RefractionAmount("Refract Amount", Range(0,1)) = 1.0
 	}
 
 	SubShader
@@ -29,6 +30,9 @@
             "RenderType" = "Opaque" 
             "Queue" = "Transparent"
         }
+
+		GrabPass { "_RefractionTex" }
+		
 		Blend SrcAlpha OneMinusSrcAlpha
 		LOD 200
 		Pass
@@ -61,7 +65,10 @@
 			half _NoiseRange;
 			half _EdgeRange;
 
-			float _Gloss;
+			float _Distortion;
+			float _RefractionAmount;
+			sampler2D _RefractionTex;
+			float4 _RefractionTex_TexelSize;
 
 			sampler2D_float _CameraDepthTexture;
 			#endif
@@ -94,13 +101,14 @@
 				o.uv_noise = TRANSFORM_TEX (v.texcoord , _NoiseTex);
 				o.normal = UnityObjectToWorldNormal(v.normal);
 				o.viewDir = WorldSpaceViewDir(v.vertex);
-				o.screenPos = ComputeScreenPos(o.pos);
+				o.screenPos = ComputeGrabScreenPos(o.pos);
 				COMPUTE_EYEDEPTH(o.screenPos.z);
 				return o;
 			}
 
 
-			fixed4 frag(v2f i):COLOR {
+			fixed4 frag(v2f i):COLOR 
+			{
 
 				//海水颜色
 				fixed4 col=_WaterColor;
@@ -109,6 +117,10 @@
 				half3 n = UnpackNormal((tex2D(_BumpMap,frac(i.uv.xy)) + 
 					tex2D(_BumpMap,frac(i.uv.zw)))* 0.5);
 				n = normalize(i.normal + n.xyz * half3(1,1,0) * _BumpPower);
+
+				float2 offset = n.xy * _Distortion * _RefractionTex_TexelSize.xy * 2;
+				i.screenPos.xy = offset + i.screenPos.xy;
+				fixed3 refrCol = tex2D(_RefractionTex, i.screenPos.xy / i.screenPos.w).rgb;
 
 				//计算高光
 				//fixed3 n = normalize(i.normal);
@@ -122,6 +134,8 @@
 				//计算菲涅耳反射
 				half fresnel = _FreScale + (1 - _FreScale) * pow(1 - dot(v, n), 5);
 				col=lerp(col,_FreColor,saturate(fresnel));
+
+				col.rgb = col.rgb * (1 - _RefractionAmount) + refrCol * _RefractionAmount;
 
 				//计算海水边缘以及海浪
 				#ifdef DEPTH_ON  
