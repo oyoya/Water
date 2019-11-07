@@ -101,7 +101,7 @@
 				o.uv_noise = TRANSFORM_TEX (v.texcoord , _NoiseTex);
 				o.normal = UnityObjectToWorldNormal(v.normal);
 				o.viewDir = WorldSpaceViewDir(v.vertex);
-				o.screenPos = ComputeGrabScreenPos(o.pos);
+				o.screenPos = ComputeScreenPos(o.pos);
 				COMPUTE_EYEDEPTH(o.screenPos.z);
 				return o;
 			}
